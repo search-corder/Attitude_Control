@@ -25,19 +25,28 @@ for i = 2 : length(te)
     Q = angle2quat(euler(1, i), euler(2, i), euler(3, i));
     epd(i) = Q(1);
     qd(:, i) = [Q(2); Q(3); Q(4)];
+    [epd(i), qd(:, i)] = nml(epd(i), qd(:, i));
 end
 Qd = [epd; qd];
 we = zeros(3, length(t));
 alpha = zeros(1, length(t));
 theta = zeros(1, length(t));
 
+% for i=1:n-1
+%     [k1, we(:, i), alpha(i), theta(i)]=diffeq(t(i), sol(:, i), theta_d(i), Qd(:, 2*i-1), wd(:, 2*i-1));
+%     [k2, ~]=diffeq(t(i)+h/2, sol(:, i)+h*k1/2, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
+%     [k3, ~]=diffeq(t(i)+h/2, sol(:, i)+h*(k1+k2)/4, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
+%     [k4, ~]=diffeq(t(i)+h/2, sol(:, i)+h*(k1+k2+k3)/6, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
+%     [k5, ~]=diffeq(t(i)+h, sol(:, i)+h*(k1+k2+k3+k4)/8, theta_d(i+1), Qd(:, 2*i+1), wd(:, 2*i+1));
+%     sol(:, i+1)=sol(:, i)+h*(k1+k2+k3+k4+k5)/5;
+% end
+
 for i=1:n-1
     [k1, we(:, i), alpha(i), theta(i)]=diffeq(t(i), sol(:, i), theta_d(i), Qd(:, 2*i-1), wd(:, 2*i-1));
     [k2, ~]=diffeq(t(i)+h/2, sol(:, i)+h*k1/2, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
-    [k3, ~]=diffeq(t(i)+h/2, sol(:, i)+h*(k1+k2)/4, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
-    [k4, ~]=diffeq(t(i)+h/2, sol(:, i)+h*(k1+k2+k3)/6, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
-    [k5, ~]=diffeq(t(i)+h, sol(:, i)+h*(k1+k2+k3+k4)/8, theta_d(i+1), Qd(:, 2*i+1), wd(:, 2*i+1));
-    sol(:, i+1)=sol(:, i)+h*(k1+k2+k3+k4+k5)/5;
+    [k3, ~]=diffeq(t(i)+h/2, sol(:, i)+h*k2/2, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
+    [k4, ~]=diffeq(t(i)+h, sol(:, i)+h*k3, theta_d(i+1), Qd(:, 2*i+1), wd(:, 2*i+1));
+    sol(:, i+1)=sol(:, i)+h*(k1+k2+k3+k4)/6;
 end
 
 end
@@ -47,6 +56,8 @@ function [dwdqdt, we, alpha, theta] = diffeq(t, ILC, theta_d, Qd, wd)
 w = [ILC(1); ILC(2); ILC(3)];
 ep = ILC(4);
 q = [ILC(5); ILC(6); ILC(7)];
+
+[ep, q] = nml(ep, q);
 
 Jn = diag([20, 15, 15]);
 kj = 0.8;
@@ -82,6 +93,7 @@ epd = Qd(1);
 qd = [Qd(2); Qd(3); Qd(4)];
 epe = epd*ep + q'*qd;
 qe = epd*q - ep*qd + crossmatrix(q)*qd;
+[epe, qe] = nml(epe, qe);
 R = (epe*epe-qe'*qe)*eye(3) + 2*(qe*qe') - 2*epe*crossmatrix(qe);
 we = w - R*wd;
 
@@ -103,11 +115,36 @@ else
 end
 theta = theta_d + gamma*ksi*we'*sign(we);
 u = -Kd*we-theta_d*sign(we);
+u = sat(u, 1);
 
 end
 
 function ax = crossmatrix(a)
 
 ax = [0, -a(3), a(2); a(3), 0, -a(1); -a(2), a(1), 0];
+
+end
+
+function y = sat(x, s)
+
+y = zeros(3, 1);
+for i = 1: 3
+    if x(i) < -s
+        y(i) = -s;
+    elseif x(i) > s
+        y(i) = s;
+    else
+        y(i) = x(i);
+    end
+end
+
+end
+
+function [ep_n, q_n] = nml(ep, q)
+
+Q = [ep, q'];
+Q_n = Q ./ norm(Q);
+ep_n = Q_n(1);
+q_n = [Q_n(2); Q_n(3); Q_n(4)];
 
 end

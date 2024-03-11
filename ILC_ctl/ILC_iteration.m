@@ -12,7 +12,7 @@ T = 1200;
 n = T/h+1;
 theta = zeros(1, n);
 
-k = 200;
+k = 10;
 
 we_max = zeros(1, k);
 alpha_max = zeros(1, k);
@@ -24,5 +24,11 @@ for i = 1: k
     alpha_max(i) = max(abs(alpha));
 end
 
+w = ilc(1:3, :);
+
+figure
+plot(t, w)
+figure
 plot(we_max)
+figure
 plot(alpha_max)
