@@ -1,16 +1,20 @@
 
-[t, ilc, we, alpha, theta] = r_k(ILC0, h, T, theta_d);
+[t, ilc, u, wen, alpha, theta] = r_k(ILC0, h, T, theta_d, dJk);
 
-function [t, sol, we, alpha, theta] = r_k(sol0, h, T, theta_d)
+function [t, sol, u, wen, alpha, theta] = r_k(sol0, h, T, theta_d, dJk)
 
-n = T/h+1;
+n = T/h;
 t = 0: h: T;
 te = 0: h/2: T;
 N = length(sol0);
 sol = zeros(N, n);
 sol(:, 1) = sol0;
 wpi = 0.0011;
-wd = [pi/12*pi/600*sin(pi/600*te); -wpi*cos(-pi/12*cos(pi/600*te)+pi/12); wpi*sin(-pi/12*cos(pi/600*te)+pi/12)];
+wd = [pi/8*pi/400*sin(pi/400*te); -wpi*cos(-pi/8*cos(pi/400*te)+pi/8); wpi*sin(-pi/8*cos(pi/400*te)+pi/8)];
+wdd = zeros(3, length(te));
+for i = 1: length(te)-1
+    wdd(:, i) = (wd(:, i+1)-wd(:, i))/(h/2);
+end
 epd0 = 0.66;
 qd0 = [0.34; -0.62; 0.25];
 epd = zeros(1, length(te));
@@ -28,16 +32,17 @@ for i = 2 : length(te)
     [epd(i), qd(:, i)] = nml(epd(i), qd(:, i));
 end
 Qd = [epd; qd];
-we = zeros(3, length(t));
+u = zeros(3, length(t));
+wen = zeros(1, length(t));
 alpha = zeros(1, length(t));
 theta = zeros(1, length(t));
 
-for i=1:n-1
-    [k1, we(:, i), alpha(i), theta(i)]=diffeq(t(i), sol(:, i), theta_d(i), Qd(:, 2*i-1), wd(:, 2*i-1));
-    [k2, ~]=diffeq(t(i)+h/2, sol(:, i)+h*k1/2, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
-    [k3, ~]=diffeq(t(i)+h/2, sol(:, i)+h*(k1+k2)/4, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
-    [k4, ~]=diffeq(t(i)+h/2, sol(:, i)+h*(k1+k2+k3)/6, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i));
-    [k5, ~]=diffeq(t(i)+h, sol(:, i)+h*(k1+k2+k3+k4)/8, theta_d(i+1), Qd(:, 2*i+1), wd(:, 2*i+1));
+for i=1:n
+    [k1, u(:, i), wen(i), alpha(i), theta(i)]=diffeq(t(i), sol(:, i), theta_d(i), Qd(:, 2*i-1), wd(:, 2*i-1), dJk, wdd(:, 2*i-1));
+    [k2, ~]=diffeq(t(i)+h/2, sol(:, i)+h*k1/2, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i), dJk, wdd(:, 2*i));
+    [k3, ~]=diffeq(t(i)+h/2, sol(:, i)+h*(k1+k2)/4, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i), dJk, wdd(:, 2*i));
+    [k4, ~]=diffeq(t(i)+h/2, sol(:, i)+h*(k1+k2+k3)/6, 0.5*(theta_d(i)+theta_d(i+1)), Qd(:, 2*i), wd(:, 2*i), dJk, wdd(:, 2*i));
+    [k5, ~]=diffeq(t(i)+h, sol(:, i)+h*(k1+k2+k3+k4)/8, theta_d(i+1), Qd(:, 2*i+1), wd(:, 2*i+1), dJk, wdd(:, 2*i+1));
     sol(:, i+1)=sol(:, i)+h*(k1+k2+k3+k4+k5)/5;
 end
 
@@ -51,7 +56,7 @@ end
 
 end
 
-function [dwdqdt, we, alpha, theta] = diffeq(t, ILC, theta_d, Qd, wd)
+function [dwdqdt, u, wen, alpha, theta] = diffeq(t, ILC, theta_d, Qd, wd, dJk, wdd)
 
 w = [ILC(1); ILC(2); ILC(3)];
 ep = ILC(4);
@@ -59,18 +64,20 @@ q = [ILC(5); ILC(6); ILC(7)];
 
 [ep, q] = nml(ep, q);
 
-Jn = diag([20, 15, 15]);
-kj = 0.8;
-J = kj.*Jn;
+J = [20, 2, 1; 2, 15, 3; 1, 3, 15];
+
+Jk = J + dJk;
 %rng(0)
 %d = [0.1*sin(pi/20*t+100*(-1+2*rand)); 0.05*sin(pi/25*t+100*(-1+2*rand)); 0.08*sin(pi/35*t+100*(-1+2*rand))];
-d = [0.1*sin(pi/20*t+1); 0.05*sin(pi/25*t+2); 0.08*sin(pi/35*t+3)];
+d = [0.1*sin(pi/20*t+10); 0.05*sin(pi/25*t+20); 0.05*sin(pi/50*t+30)];
 
-[we, qe] = target(w, ep, q, Qd, wd);
+[we, epe, qe] = target(w, ep, q, Qd, wd);
 
-[u, theta] = control(we, qe, Jn, theta_d);
+wen = norm(we);
 
-dw = inv(J)*(-crossmatrix(w)*J*w+u+d);
+[u, theta] = control(we, epe, qe, theta_d, d, wd, wdd);
+
+dw = inv(Jk)*(-crossmatrix(w)*Jk*w+u+d);
 dep = -0.5*q'*w;
 dq = 0.5*(crossmatrix(q)+ep*eye(3))*w;
 
@@ -87,7 +94,7 @@ dwdqdt(7) = dq(3);
 
 end
 
-function [we, qe] = target(w, ep, q, Qd, wd)
+function [we, epe, qe] = target(w, ep, q, Qd, wd)
 
 epd = Qd(1);
 qd = [Qd(2); Qd(3); Qd(4)];
@@ -99,25 +106,23 @@ we = w - R*wd;
 
 end
 
-function [u, theta] = control(we, qe, Jn, theta_d)
+function [u, theta] = control(we, epe, qe, theta_d, d, wd, wdd)
 
-Kd = 4*eye(3);
-gamma = 5;
-betaq = 0.001;
-betaw = 0.001;
-lanmax = max(eig(Jn));
-E = (qe'*Jn*qe+we'*Jn*we)^0.5;
-betadz = (lanmax*(betaq^2+betaw^2))^0.5;
-if E > betadz
-    ksi = 1 - betadz/E;
-else
-    ksi = 0;
+kp = 2;
+kd = 5;
+gam1 = 10;
+gam2 = 0.01;
+sig = 0.0001;
+beta_J = norm([20.5, 2.5, 1.5; 2.5, 15.5, 3.5; 1.5, 3.5, 15.5]);
+beta_d = norm(d);
+bou = beta_J*((norm(wd))^2+norm(wdd))+beta_d;
+theta = (1-gam2)*theta_d+gam1*we'*tanh(we/sig);
+if theta < bou
+    theta = bou;
 end
-epsilon = 1e-4;
-theta = theta_d + gamma*ksi*we'*tanh(we/epsilon);
-u = -Kd*we-theta*tanh(we/epsilon);
-u = sat(u, 1);
-u = deadzone(u, 0.001);
+u = -kp*epe*qe-kd*we-theta*tanh(we/sig);
+u = sat(u, 0.2);
+u = deadzone(u, 0.0001);
 
 end
 

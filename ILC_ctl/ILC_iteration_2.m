@@ -1,5 +1,7 @@
 clear
 
+format shortE;
+
 betaq = 0.001;
 betaw = 0.001;
 wpi = 0.0011;
@@ -8,29 +10,20 @@ ep0 = 0.66 + betaq * (-1+2*rand);
 q0 = [0.34 -0.62 0.25]' + betaq.*[-1+2*rand -1+2*rand -1+2*rand]';
 ILC0 = [w0; ep0; q0];
 h = 0.01;
-T = 1200;
+T = 800;
 n = T/h+1;
 theta = zeros(1, n);
 
-k = 50;
+k = 0: 50;
 
-we_max = zeros(1, k);
-alpha_max = zeros(1, k);
+we_max = zeros(1, length(k));
+alpha_max = zeros(1, length(k));
 
-for i = 1: k
+for i = k
     theta_d = theta;
-    ILC;
-    we_max(i) = max(max(abs(we)));
-    alpha_max(i) = max(abs(alpha));
+    A = 0.5*(2*rand(3)-ones(3));
+    dJk = tril(A, -1)+triu(A', 0);
+    ILC_2;
+    we_max(i+1) = max(wen);
+    alpha_max(i+1) = max(alpha);
 end
-
-w = ilc(1:3, :);
-
-figure
-plot(t, w)
-figure
-plot(we_max)
-figure
-plot(alpha_max)
-figure
-plot(t, ilc(4:7, :))
